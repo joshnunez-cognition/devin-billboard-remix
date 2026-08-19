@@ -2,6 +2,7 @@
    Drag four corners onto a billboard face; your line is warped into it. */
 
 const MAX_W = 1080;
+const MAX_SRC = 4096;   // longest side of the working image; keeps the warp interactive
 
 const els = {
   stage: document.getElementById('stage'),
@@ -414,8 +415,12 @@ function mulberry(seed) {
 /* ---------- image loading ---------- */
 
 function useImage(img, quad) {
-  state.img = img;
-  state.quad = quad || defaultQuad(img.width, img.height);
+  const src = fit(img);
+  const s = src.width / img.width;
+  state.img = src;
+  state.quad = quad
+    ? quad.map(([x, y]) => [x * s, y * s])
+    : defaultQuad(src.width, src.height);
   els.hint.style.opacity = 1;
   render();
 }
@@ -426,13 +431,52 @@ function defaultQuad(w, h) {
   return [[mx, my + skew], [w - mx, my], [w - mx, h - my], [mx, h - my - skew]];
 }
 
+// Downscale oversized photos: a 48MP phone shot makes the per-pixel warp crawl
+// and can blow past the browser's canvas limits.
+function fit(img) {
+  const long = Math.max(img.width, img.height);
+  if (long <= MAX_SRC) return img;
+  const s = MAX_SRC / long;
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.width * s);
+  c.height = Math.round(img.height * s);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+
+function unsupported(f) {
+  return /\.(heic|heif)$/i.test(f.name) || /^image\/hei[cf]/i.test(f.type);
+}
+
 els.file.addEventListener('change', e => {
   const f = e.target.files[0];
+  e.target.value = '';           // let the same file be picked again
   if (!f) return;
+
+  if (unsupported(f)) {
+    els.status.textContent =
+      'Browsers can\u2019t decode HEIC/HEIF. On iPhone: Settings \u203a Camera \u203a Formats \u203a Most Compatible, or export the photo as JPEG.';
+    return;
+  }
+  if (f.type && !f.type.startsWith('image/')) {
+    els.status.textContent = 'That file isn\u2019t an image \u2014 pick a JPEG, PNG or WebP.';
+    return;
+  }
+
+  const url = URL.createObjectURL(f);
   const img = new Image();
-  img.onload = () => useImage(img);
-  img.src = URL.createObjectURL(f);
-  els.status.textContent = '';
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    useImage(img);
+    els.status.textContent = 'Photo loaded \u2014 drag the four corners onto the board face.';
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(url);
+    els.status.textContent =
+      'Couldn\u2019t read \u201c' + f.name + '\u201d. Try a JPEG, PNG or WebP export of the photo.';
+  };
+  img.src = url;
+  els.status.textContent = 'Loading photo\u2026';
 });
 
 // hand-measured corners of the blank face in sample-photo.jpg (1536x1024)
