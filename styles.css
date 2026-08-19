@@ -109,10 +109,19 @@ textarea:focus, input:focus { outline: 1px solid #3a4150; }
 .toggle input { accent-color: #fff; }
 
 .sheet-handle, .touch-only { display: none; }
+/* the camera path is about the input device, not the screen size: a tablet gets
+   it too, which is what the HEIC message tells any coarse-pointer user to use */
+@media (pointer: coarse) { .touch-only { display: inline-flex; } }
 
 @media (max-width: 900px) {
   main { grid-template-columns: 1fr; }
   .panel { position: static; }
+}
+
+/* the sheet takes most of a short landscape viewport, so give the board the
+   footer's pixels back while it is open */
+@media (max-height: 520px) and (orientation: landscape) and (pointer: coarse) {
+  body.sheet-open .stage-foot { display: none; }
 }
 
 /* ---------- phones (incl. short landscape) ---------- */
@@ -157,8 +166,6 @@ textarea:focus, input:focus { outline: 1px solid #3a4150; }
   .sheet-grip { width: 40px; height: 4px; border-radius: 999px; background: #3a4150; }
   .sheet-label { font-size: 13px; font-weight: 600; letter-spacing: .01em; }
   .panel.open .sheet-label { color: var(--muted); }
-
-  .touch-only { display: inline-flex; }
 
   /* touch targets: 44px minimum */
   .btn { min-height: 44px; padding: 11px 12px; font-size: 15px; }
