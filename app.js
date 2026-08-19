@@ -266,15 +266,15 @@ function drawLights(canvas, quad) {
   const height = Math.hypot(quad[3][0] - quad[0][0], quad[3][1] - quad[0][1]);
   const fixtureWidth = Math.max(8, width * 0.018);
   const fixtureLength = Math.max(22, height * 0.11);
-  const radius = width * 0.16;
+  const radius = width * 0.09;
 
   g.save();
   g.globalCompositeOperation = 'screen';
   for (const t of [0.2, 0.5, 0.8]) {
     const x = quad[0][0] + (quad[1][0] - quad[0][0]) * t;
     const y = quad[0][1] + (quad[1][1] - quad[0][1]) * t;
-    const glow = g.createRadialGradient(x, y - fixtureLength * 0.15, 3, x, y, radius);
-    glow.addColorStop(0, 'rgba(255,240,205,.42)');
+    const glow = g.createRadialGradient(x, y - fixtureLength * 0.95, 3, x, y - fixtureLength * 0.95, radius);
+    glow.addColorStop(0, 'rgba(255,240,205,.08)');
     glow.addColorStop(1, 'rgba(255,240,205,0)');
     g.fillStyle = glow;
     g.beginPath();
@@ -451,9 +451,9 @@ function setChip(i) {
   els.chips.forEach((c, n) => c.classList.toggle('active', n === i));
 }
 
-/* ---------- sample scene ---------- */
+/* ---------- sample city ---------- */
 
-function sampleScene() {
+function sampleCity() {
   const W = 1600, H = 1000;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
@@ -585,7 +585,7 @@ els.file.addEventListener('change', e => {
 });
 
 els.photo.addEventListener('click', () => {
-  const img = sampleScene();
+  const img = sampleCity();
   img.onload = () => {
     useImage(img);
     els.status.textContent = 'Sample city loaded \u2014 place your board.';
@@ -606,7 +606,7 @@ document.querySelectorAll('[data-placement]').forEach(button => {
   button.addEventListener('click', () => {
     if (!state.img) return;
     const placement = button.dataset.placement;
-    state.quad = placedQuad(state.img.width, state.img.height, placement === 'reset' ? 'center' : placement);
+    state.quad = placedQuad(state.img.width, state.img.height, placement);
     render();
   });
 });
