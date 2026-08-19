@@ -32,9 +32,17 @@
     </div>
   </section>
 
-  <aside class="panel">
+  <aside class="panel" id="panel">
+    <button class="sheet-handle" id="sheetToggle" aria-expanded="false" aria-controls="panel">
+      <span class="sheet-grip"></span>
+      <span class="sheet-label">Edit your billboard</span>
+    </button>
     <div class="group">
       <div class="label">1 · Billboard photo</div>
+      <label class="btn file touch-only" id="cameraBtn">
+        Take photo
+        <input type="file" id="camera" accept="image/*" capture="environment" />
+      </label>
       <div class="row">
         <label class="btn file">
           Upload photo
