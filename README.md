@@ -1,7 +1,8 @@
 # Billboard Remix — Add a Devin billboard to your city
 
 A zero-dependency single page that draws a synthetic Devin billboard into any city photo,
-then hands you a full-resolution PNG and a prefilled X post.
+then hands you a PNG at the photo's own resolution (capped at 4096px on the long side, so the
+per-pixel warp stays interactive) and a prefilled X post.
 
 ## Use it
 
