@@ -551,6 +551,9 @@ function fit(img) {
 
 // Browsers differ on HEIC/HEIF: Safari decodes it, Chrome and Firefox don't. Try
 // the load either way and only mention the format once it has actually failed.
+const HEIC_GUIDANCE =
+  'This browser can\u2019t decode HEIC/HEIF. On iPhone: Settings \u203a Camera \u203a Formats \u203a Most Compatible, or export the photo as JPEG.';
+
 function looksHeic(f) {
   return /\.(heic|heif)$/i.test(f.name) || /^image\/hei[cf]/i.test(f.type);
 }
@@ -561,7 +564,9 @@ els.file.addEventListener('change', e => {
   if (!f) return;
 
   if (f.type && !f.type.startsWith('image/')) {
-    els.status.textContent = 'That file isn\u2019t an image \u2014 pick a JPEG, PNG or WebP.';
+    els.status.textContent = looksHeic(f)
+      ? HEIC_GUIDANCE
+      : 'That file isn\u2019t an image \u2014 pick a JPEG, PNG or WebP.';
     return;
   }
 
@@ -575,7 +580,7 @@ els.file.addEventListener('change', e => {
   img.onerror = () => {
     URL.revokeObjectURL(url);
     els.status.textContent = looksHeic(f)
-      ? 'This browser can\u2019t decode HEIC/HEIF. On iPhone: Settings \u203a Camera \u203a Formats \u203a Most Compatible, or export the photo as JPEG.'
+      ? HEIC_GUIDANCE
       : 'Couldn\u2019t read \u201c' + f.name + '\u201d. Try a JPEG, PNG or WebP export of the photo.';
   };
   img.src = url;
@@ -619,6 +624,10 @@ document.querySelectorAll('[data-placement]').forEach(button => {
 window.addEventListener('resize', render);
 
 els.download.addEventListener('click', () => {
+  if (!state.img) {
+    els.status.textContent = 'Load a photo before downloading.';
+    return;
+  }
   const out = document.createElement('canvas');
   const guides = els.guides.checked;
   els.guides.checked = false;
