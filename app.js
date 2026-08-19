@@ -1,21 +1,20 @@
 /* Do It All With Devin — Billboard Remix
-   Drag four corners onto a billboard face; your line is warped into it. */
+   Place a synthetic billboard in any city photo. */
 
 const MAX_W = 1080;
 const MAX_SRC = 4096;   // longest side of the working image; keeps the warp interactive
+const BLEND = 0.18;
 
 const els = {
   stage: document.getElementById('stage'),
   hint: document.getElementById('hint'),
   file: document.getElementById('file'),
-  sample: document.getElementById('useSample'),
   photo: document.getElementById('usePhoto'),
   text: document.getElementById('text'),
   presets: document.getElementById('presets'),
-  themes: document.getElementById('themes'),
   scale: document.getElementById('scale'),
-  blend: document.getElementById('blend'),
   wordmark: document.getElementById('wordmark'),
+  legs: document.getElementById('legs'),
   guides: document.getElementById('showGuides'),
   download: document.getElementById('download'),
   tweet: document.getElementById('tweet'),
@@ -32,23 +31,17 @@ const PRESETS = [
   '39 billboards.\nZero all-nighters.',
 ];
 
-const THEMES = [
-  { id: 'ink', bg: '#0a0b0d', fg: '#ffffff', swatch: 'linear-gradient(135deg,#0a0b0d,#25272d)' },
-  { id: 'paper', bg: '#ffffff', fg: '#0a0b0d', swatch: 'linear-gradient(135deg,#fff,#d8dae0)' },
-  { id: 'signal', bg: '#1723d8', fg: '#ffffff', swatch: 'linear-gradient(135deg,#1723d8,#5a63ff)' },
-  { id: 'bare', bg: null, fg: '#ffffff', swatch: 'repeating-linear-gradient(45deg,#15171c 0 6px,#0b0c0f 6px 12px)' },
-];
-
 const CAPTION =
-  "I do it all with Devin. Today Devin is on 39 billboards across NYC & SF — " +
-  "and it built the tool I used to make this image, corner-warp math and all.";
+  "I put Devin on a billboard in my city. Built with the tool Devin wrote — " +
+  "perspective math and all.";
 const SCOTT_POST = 'https://x.com/ScottWu46/status/2090135734204473374';
 
 const state = {
   img: null,
   quad: null,          // [[x,y] x4] in image space: TL, TR, BR, BL
-  theme: 'ink',
   drag: -1,
+  dragOrigin: null,
+  dragStart: null,
   dpr: 1,
   view: 1,             // image px -> canvas px
 };
@@ -97,18 +90,14 @@ function buildLayer(w, h) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const g = c.getContext('2d');
-  const theme = THEMES.find(t => t.id === state.theme);
-
-  if (theme.bg) {
-    g.fillStyle = theme.bg;
-    g.fillRect(0, 0, w, h);
-    // subtle vignette so a flat fill doesn't read as a sticker
-    const grad = g.createLinearGradient(0, 0, w, h);
-    grad.addColorStop(0, 'rgba(255,255,255,0.06)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.10)');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, w, h);
-  }
+  g.fillStyle = '#0a0b0d';
+  g.fillRect(0, 0, w, h);
+  const light = g.createLinearGradient(0, 0, 0, h);
+  light.addColorStop(0, `rgba(255,255,255,${BLEND * 0.35})`);
+  light.addColorStop(0.48, 'rgba(255,255,255,0.01)');
+  light.addColorStop(1, `rgba(0,0,0,${BLEND * 0.45})`);
+  g.fillStyle = light;
+  g.fillRect(0, 0, w, h);
 
   const lines = (els.text.value || '').split('\n').map(s => s.trim()).filter(Boolean);
   const pad = w * 0.07;
@@ -126,17 +115,12 @@ function buildLayer(w, h) {
   }
 
   g.font = font(size);
-  g.fillStyle = theme.fg;
+  g.fillStyle = '#ffffff';
   g.textAlign = 'left';
   g.textBaseline = 'alphabetic';
   const lh = size * 0.98;
   const blockH = lh * lines.length;
   let y = h * (els.wordmark.checked ? 0.44 : 0.5) - blockH / 2 + size * 0.78;
-  if (theme.id === 'bare') {
-    g.shadowColor = 'rgba(0,0,0,0.55)';
-    g.shadowBlur = size * 0.14;
-    g.shadowOffsetY = size * 0.03;
-  }
   for (const line of lines) {
     g.fillText(line, pad, y);
     y += lh;
@@ -146,7 +130,7 @@ function buildLayer(w, h) {
   if (els.wordmark.checked) {
     const ws = h * 0.115;
     g.font = `700 ${ws}px -apple-system, "Segoe UI", Inter, Helvetica, Arial, sans-serif`;
-    g.fillStyle = theme.fg;
+    g.fillStyle = '#ffffff';
     const label = 'devin';
     const lw = g.measureText(label).width;
     const bx = w - pad - lw, by = h - pad;
@@ -164,7 +148,7 @@ function buildLayer(w, h) {
 
 /* ---------- warp + composite ---------- */
 
-function warp(target, layer, quad, blendAmt) {
+function warp(target, layer, quad) {
   const W = target.width, H = target.height;
   const xs = quad.map(p => p[0]), ys = quad.map(p => p[1]);
   const x0 = Math.max(0, Math.floor(Math.min(...xs)));
@@ -203,17 +187,108 @@ function warp(target, layer, quad, blendAmt) {
       if (a <= 0.003) continue;
 
       const o = (y * bw + x) * 4;
-      const lum = (bd[o] * 0.299 + bd[o + 1] * 0.587 + bd[o + 2] * 0.114) / 255;
-      // let the scene's own light fall across the pasted face
-      const shade = 1 - blendAmt + blendAmt * (0.45 + 0.85 * lum);
-
       for (let k = 0; k < 3; k++) {
-        const src = (ld[i00 + k] * w00 + ld[i10 + k] * w10 + ld[i01 + k] * w01 + ld[i11 + k] * w11) * shade;
+        const src = ld[i00 + k] * w00 + ld[i10 + k] * w10 + ld[i01 + k] * w01 + ld[i11 + k] * w11;
         bd[o + k] = bd[o + k] * (1 - a) + Math.min(255, src) * a;
       }
     }
   }
   ctx.putImageData(base, x0, y0);
+}
+
+function quadPath(g, quad, dx = 0, dy = 0) {
+  g.beginPath();
+  quad.forEach(([x, y], i) => i
+    ? g.lineTo(x + dx, y + dy)
+    : g.moveTo(x + dx, y + dy));
+  g.closePath();
+}
+
+function drawBoard(canvas, quad, { legs = true } = {}) {
+  const g = canvas.getContext('2d');
+  const H = canvas.height;
+  const width = (Math.hypot(quad[1][0] - quad[0][0], quad[1][1] - quad[0][1]) +
+    Math.hypot(quad[2][0] - quad[3][0], quad[2][1] - quad[3][1])) / 2;
+  const height = (Math.hypot(quad[3][0] - quad[0][0], quad[3][1] - quad[0][1]) +
+    Math.hypot(quad[2][0] - quad[1][0], quad[2][1] - quad[1][1])) / 2;
+  const frame = Math.max(7, width * 0.018);
+
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,.4)';
+  g.shadowBlur = width * 0.035;
+  g.shadowOffsetX = width * 0.018;
+  g.shadowOffsetY = height * 0.03;
+  quadPath(g, quad);
+  g.fillStyle = '#1a1c20';
+  g.fill();
+  g.restore();
+
+  if (legs) {
+    const postWidth = Math.max(12, width * 0.045);
+    const legLength = Math.max(0, Math.min(height * 0.85, H - Math.max(quad[2][1], quad[3][1])));
+    const bottom = [quad[3], quad[2]];
+    for (const t of [0.2, 0.8]) {
+      const x = bottom[0][0] + (bottom[1][0] - bottom[0][0]) * t;
+      const y = bottom[0][1] + (bottom[1][1] - bottom[0][1]) * t;
+      const top = Math.max(0, y);
+      const end = Math.min(H, top + legLength);
+      g.fillStyle = '#23262c';
+      g.beginPath();
+      g.moveTo(x - postWidth / 2, top);
+      g.lineTo(x + postWidth / 2, top);
+      g.lineTo(x + postWidth * 0.32, end);
+      g.lineTo(x - postWidth * 0.32, end);
+      g.closePath();
+      g.fill();
+    }
+    g.strokeStyle = '#2b2f36';
+    g.lineWidth = Math.max(5, frame * 1.25);
+    g.beginPath();
+    g.moveTo(quad[3][0], quad[3][1]);
+    g.lineTo(quad[2][0], quad[2][1]);
+    g.stroke();
+  }
+
+  g.lineJoin = 'round';
+  g.lineWidth = frame * 1.7;
+  g.strokeStyle = '#2b2f36';
+  quadPath(g, quad);
+  g.stroke();
+  g.lineWidth = Math.max(2, frame * 0.45);
+  g.strokeStyle = '#494f59';
+  quadPath(g, quad);
+  g.stroke();
+}
+
+function drawLights(canvas, quad) {
+  const g = canvas.getContext('2d');
+  const width = Math.hypot(quad[1][0] - quad[0][0], quad[1][1] - quad[0][1]);
+  const height = Math.hypot(quad[3][0] - quad[0][0], quad[3][1] - quad[0][1]);
+  const fixtureWidth = Math.max(8, width * 0.018);
+  const fixtureLength = Math.max(22, height * 0.11);
+  const radius = width * 0.16;
+
+  g.save();
+  g.globalCompositeOperation = 'screen';
+  for (const t of [0.2, 0.5, 0.8]) {
+    const x = quad[0][0] + (quad[1][0] - quad[0][0]) * t;
+    const y = quad[0][1] + (quad[1][1] - quad[0][1]) * t;
+    const glow = g.createRadialGradient(x, y - fixtureLength * 0.15, 3, x, y, radius);
+    glow.addColorStop(0, 'rgba(255,240,205,.42)');
+    glow.addColorStop(1, 'rgba(255,240,205,0)');
+    g.fillStyle = glow;
+    g.beginPath();
+    g.arc(x, y, radius, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.globalCompositeOperation = 'source-over';
+  for (const t of [0.2, 0.5, 0.8]) {
+    const x = quad[0][0] + (quad[1][0] - quad[0][0]) * t;
+    const y = quad[0][1] + (quad[1][1] - quad[0][1]) * t;
+    g.fillStyle = '#3a3f48';
+    g.fillRect(x - fixtureWidth / 2, y - fixtureLength, fixtureWidth, fixtureLength);
+  }
+  g.restore();
 }
 
 function compose(canvas, scale) {
@@ -226,7 +301,9 @@ function compose(canvas, scale) {
   const quad = state.quad.map(([x, y]) => [x * scale, y * scale]);
   const side = Math.hypot(quad[1][0] - quad[0][0], quad[1][1] - quad[0][1]);
   const lw = Math.max(480, Math.min(2200, Math.round(side * 2)));
-  warp(canvas, buildLayer(lw, Math.round(lw * 0.5)), quad, Number(els.blend.value) / 100);
+  drawBoard(canvas, quad, { legs: els.legs.checked });
+  warp(canvas, buildLayer(lw, Math.round(lw * 0.5)), quad);
+  drawLights(canvas, quad);
   return canvas;
 }
 
@@ -282,6 +359,41 @@ function nearestCorner(x, y) {
   return best;
 }
 
+function cross(a, b, c) {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function convexQuad(quad) {
+  const signs = quad.map((p, i) => cross(p, quad[(i + 1) % 4], quad[(i + 2) % 4]));
+  return signs.every(s => s > 1) || signs.every(s => s < -1);
+}
+
+function pointInQuad(x, y) {
+  const p = [x, y];
+  const signs = state.quad.map((q, i) => cross(q, state.quad[(i + 1) % 4], p));
+  return signs.every(s => s >= 0) || signs.every(s => s <= 0);
+}
+
+function clampPoint([x, y]) {
+  const margin = Math.min(state.img.width, state.img.height) * 0.18;
+  return [
+    Math.max(-margin, Math.min(state.img.width + margin, x)),
+    Math.max(-margin, Math.min(state.img.height + margin, y)),
+  ];
+}
+
+function moveQuad(origin, dx, dy) {
+  const moved = origin.map(p => clampPoint([p[0] + dx, p[1] + dy]));
+  const minX = Math.min(...moved.map(p => p[0]));
+  const maxX = Math.max(...moved.map(p => p[0]));
+  const minY = Math.min(...moved.map(p => p[1]));
+  const maxY = Math.max(...moved.map(p => p[1]));
+  const margin = Math.min(state.img.width, state.img.height) * 0.18;
+  const shiftX = minX < -margin ? -margin - minX : maxX > state.img.width + margin ? state.img.width + margin - maxX : 0;
+  const shiftY = minY < -margin ? -margin - minY : maxY > state.img.height + margin ? state.img.height + margin - maxY : 0;
+  return moved.map(([x, y]) => [x + shiftX, y + shiftY]);
+}
+
 function pos(e) {
   const r = els.stage.getBoundingClientRect();
   return [(e.clientX - r.left) / state.view, (e.clientY - r.top) / state.view];
@@ -290,28 +402,48 @@ function pos(e) {
 els.stage.addEventListener('pointerdown', e => {
   const [x, y] = pos(e);
   state.drag = nearestCorner(x, y);
+  if (state.drag < 0 && pointInQuad(x, y)) {
+    state.drag = -2;
+    state.dragStart = [x, y];
+    state.dragOrigin = state.quad.map(p => p.slice());
+  }
   if (state.drag >= 0) {
     els.stage.setPointerCapture(e.pointerId);
     els.stage.style.cursor = 'grabbing';
     els.hint.style.opacity = 0;
     setChip(state.drag);
     render();
+  } else if (state.drag === -2) {
+    els.stage.setPointerCapture(e.pointerId);
+    els.stage.style.cursor = 'grabbing';
+    els.hint.style.opacity = 0;
   }
 });
 els.stage.addEventListener('pointermove', e => {
-  if (state.drag < 0) {
+  if (state.drag === -1) {
     const [x, y] = pos(e);
-    els.stage.style.cursor = nearestCorner(x, y) >= 0 ? 'grab' : 'default';
+    els.stage.style.cursor = nearestCorner(x, y) >= 0 || pointInQuad(x, y) ? 'grab' : 'default';
     return;
   }
   const [x, y] = pos(e);
-  state.quad[state.drag] = [
-    Math.max(0, Math.min(state.img.width, x)),
-    Math.max(0, Math.min(state.img.height, y)),
-  ];
+  if (state.drag === -2) {
+    const next = moveQuad(state.dragOrigin, x - state.dragStart[0], y - state.dragStart[1]);
+    if (convexQuad(next)) state.quad = next;
+  } else {
+    const next = state.quad.map(p => p.slice());
+    next[state.drag] = clampPoint([x, y]);
+    if (convexQuad(next)) state.quad = next;
+  }
   render();
 });
-const endDrag = () => { state.drag = -1; setChip(-1); els.stage.style.cursor = 'grab'; render(); };
+const endDrag = () => {
+  state.drag = -1;
+  state.dragOrigin = null;
+  state.dragStart = null;
+  setChip(-1);
+  els.stage.style.cursor = 'grab';
+  render();
+};
 els.stage.addEventListener('pointerup', endDrag);
 els.stage.addEventListener('pointercancel', endDrag);
 
@@ -362,43 +494,7 @@ function sampleScene() {
     }
   }
 
-  // billboard: face + frame + posts, slight perspective
-  const face = [[300, 210], [1180, 300], [1180, 745], [300, 690]];
-  g.save();
-  g.beginPath();
-  face.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
-  g.closePath();
-  g.fillStyle = '#1a1c20';
-  g.fill();
-  g.lineWidth = 22;
-  g.strokeStyle = '#2b2f36';
-  g.stroke();
-  g.lineWidth = 6;
-  g.strokeStyle = '#494f59';
-  g.stroke();
-  g.restore();
-
-  g.fillStyle = '#23262c';
-  g.fillRect(430, 720, 46, 280);
-  g.fillRect(980, 760, 46, 240);
-  g.fillStyle = 'rgba(0,0,0,.35)';
-  g.fillRect(300, 690, 880, 26);
-
-  // gantry lights
-  for (const lx of [430, 700, 980]) {
-    g.fillStyle = '#3a3f48';
-    g.fillRect(lx - 8, 150, 16, 46);
-    const l = g.createRadialGradient(lx, 200, 4, lx, 200, 190);
-    l.addColorStop(0, 'rgba(255,240,205,.5)');
-    l.addColorStop(1, 'rgba(255,240,205,0)');
-    g.fillStyle = l;
-    g.beginPath();
-    g.arc(lx, 210, 190, 0, Math.PI * 2);
-    g.fill();
-  }
-
   const img = new Image();
-  img.dataset.quad = JSON.stringify(face);
   img.src = c.toDataURL('image/png');
   return img;
 }
@@ -420,15 +516,24 @@ function useImage(img, quad) {
   state.img = src;
   state.quad = quad
     ? quad.map(([x, y]) => [x * s, y * s])
-    : defaultQuad(src.width, src.height);
+    : placedQuad(src.width, src.height);
   els.hint.style.opacity = 1;
   render();
 }
 
-function defaultQuad(w, h) {
-  const mx = w * 0.16, my = h * 0.2;
-  const skew = h * 0.035;
-  return [[mx, my + skew], [w - mx, my], [w - mx, h - my], [mx, h - my - skew]];
+function placedQuad(w, h, placement = 'center') {
+  const boardW = w * 0.46;
+  const boardH = boardW * 0.5;
+  const centerX = w * ({ left: 0.29, right: 0.71 }[placement] || 0.5);
+  const top = h * 0.16;
+  const left = centerX - boardW / 2;
+  const skew = boardW * (placement === 'left' ? 0.035 : placement === 'right' ? -0.035 : 0.015);
+  return [
+    [left, top + skew],
+    [left + boardW, top],
+    [left + boardW, top + boardH],
+    [left, top + boardH + skew],
+  ];
 }
 
 // Downscale oversized photos: a 48MP phone shot makes the per-pixel warp crawl
@@ -468,7 +573,7 @@ els.file.addEventListener('change', e => {
   img.onload = () => {
     URL.revokeObjectURL(url);
     useImage(img);
-    els.status.textContent = 'Photo loaded \u2014 drag the four corners onto the board face.';
+    els.status.textContent = 'Photo loaded \u2014 place your board.';
   };
   img.onerror = () => {
     URL.revokeObjectURL(url);
@@ -479,18 +584,12 @@ els.file.addEventListener('change', e => {
   els.status.textContent = 'Loading photo\u2026';
 });
 
-// hand-measured corners of the blank face in sample-photo.jpg (1536x1024)
-const PHOTO_QUAD = [[408, 54], [1120, 405], [1156, 941], [388, 715]];
-
 els.photo.addEventListener('click', () => {
-  const img = new Image();
-  img.onload = () => useImage(img, PHOTO_QUAD.map(p => p.slice()));
-  img.src = 'sample-photo.jpg';
-});
-
-els.sample.addEventListener('click', () => {
   const img = sampleScene();
-  img.onload = () => useImage(img, JSON.parse(img.dataset.quad));
+  img.onload = () => {
+    useImage(img);
+    els.status.textContent = 'Sample city loaded \u2014 place your board.';
+  };
 });
 
 /* ---------- controls ---------- */
@@ -503,22 +602,17 @@ PRESETS.forEach(p => {
   els.presets.appendChild(b);
 });
 
-THEMES.forEach(t => {
-  const d = document.createElement('div');
-  d.className = 'theme' + (t.id === state.theme ? ' active' : '');
-  d.style.background = t.swatch;
-  d.title = t.id;
-  d.onclick = () => {
-    state.theme = t.id;
-    [...els.themes.children].forEach(n => n.classList.remove('active'));
-    d.classList.add('active');
+document.querySelectorAll('[data-placement]').forEach(button => {
+  button.addEventListener('click', () => {
+    if (!state.img) return;
+    const placement = button.dataset.placement;
+    state.quad = placedQuad(state.img.width, state.img.height, placement === 'reset' ? 'center' : placement);
     render();
-  };
-  els.themes.appendChild(d);
+  });
 });
 
 ['input', 'change'].forEach(ev => {
-  [els.text, els.scale, els.blend, els.wordmark, els.guides].forEach(n =>
+  [els.text, els.scale, els.wordmark, els.legs, els.guides].forEach(n =>
     n.addEventListener(ev, render));
 });
 window.addEventListener('resize', render);
