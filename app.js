@@ -1,9 +1,25 @@
 /* Do It All With Devin — Billboard Remix
    Place a synthetic billboard in any city photo. */
 
+const COARSE = matchMedia('(pointer: coarse)').matches;
+// Kept in sync with the phone breakpoint in styles.css.
+const PHONE = () =>
+  matchMedia('(max-width: 700px), (max-height: 520px) and (orientation: landscape) and (pointer: coarse)').matches;
+
 const MAX_W = 1080;
-const MAX_SRC = 4096;   // longest side of the working image; keeps the warp interactive
+// Longest side of the working image; keeps the warp interactive. Phones get a
+// tighter cap: 4096 is ~16.7MP, which is at iOS Safari's canvas ceiling and
+// makes the full-res export both slow and memory-risky.
+const MAX_SRC = COARSE ? 2560 : 4096;
 const BLEND = 0.18;
+const FILENAME = 'do-it-all-with-devin.png';
+
+// Handles are drawn and hit-tested in CSS pixels; a fingertip needs both bigger.
+const HANDLE_R = COARSE ? 11 : 7;
+const HIT_R_MOUSE = 18;
+const HIT_R_TOUCH = 30;
+const LOUPE_R = 52;
+const LOUPE_ZOOM = 2.6;
 
 const els = {
   stage: document.getElementById('stage'),
@@ -21,6 +37,9 @@ const els = {
   copyText: document.getElementById('copyText'),
   status: document.getElementById('status'),
   chips: [...document.querySelectorAll('.chip')],
+  camera: document.getElementById('camera'),
+  panel: document.getElementById('panel'),
+  sheetToggle: document.getElementById('sheetToggle'),
 };
 
 const PRESETS = [
@@ -40,10 +59,12 @@ const state = {
   img: null,
   quad: null,          // [[x,y] x4] in image space: TL, TR, BR, BL
   drag: -1,
+  grab: [0, 0],        // pointer -> corner offset in image space, so the corner doesn't jump
+  touchDrag: false,
   dragOrigin: null,
   dragStart: null,
   dpr: 1,
-  view: 1,             // image px -> canvas px
+  view: 1,             // image px -> CSS px
 };
 
 /* ---------- linear algebra ---------- */
@@ -316,22 +337,44 @@ function render() {
   requestAnimationFrame(() => { pending = false; draw(); });
 }
 
+// On phones the canvas has to leave room for the header, the stage footer and
+// the collapsed control sheet, otherwise the lower handles land off-screen
+// (worst in landscape, where the image was taller than the whole viewport).
+function stageMaxHeight() {
+  if (!PHONE()) return Infinity;
+  const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  const share = els.panel.classList.contains('open') ? 0.34 : 0.62;
+  return Math.max(160, Math.min(vh - 175, vh * share));
+}
+
 function draw() {
   if (!state.img) return;
   const c = els.stage;
-  const wrapW = Math.min(c.parentElement.clientWidth - 2, MAX_W);
-  state.view = Math.min(1, wrapW / state.img.width);
-  compose(c, state.view);
-  c.style.width = c.width + 'px';
-  c.style.height = c.height + 'px';
+  const availW = Math.min(c.parentElement.clientWidth - 2, MAX_W);
+  state.view = Math.min(1, availW / state.img.width, stageMaxHeight() / state.img.height);
+
+  // Render the backing store at devicePixelRatio so the preview isn't a blurry
+  // upscale of a 1x render. Capped at 2x and at MAX_W to bound the warp cost, and
+  // dropped to 1x mid-drag (2x quadruples the per-pixel warp: 16ms -> 64ms here).
+  const cssW = state.img.width * state.view;
+  const want = state.drag >= 0 ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+  state.dpr = Math.max(1, Math.min(want, MAX_W / cssW));
+
+  compose(c, state.view * state.dpr);
+  c.style.width = Math.round(cssW) + 'px';
+  c.style.height = Math.round(state.img.height * state.view) + 'px';
+
+  const loupe = state.touchDrag && state.drag >= 0;
 
   if (els.guides.checked) {
     const g = c.getContext('2d');
-    const q = state.quad.map(([x, y]) => [x * state.view, y * state.view]);
+    const s = state.view * state.dpr;
+    const r = HANDLE_R * state.dpr;
+    const q = state.quad.map(([x, y]) => [x * s, y * s]);
     g.save();
     g.strokeStyle = 'rgba(255,255,255,.85)';
-    g.setLineDash([6, 5]);
-    g.lineWidth = 1.5;
+    g.setLineDash([6 * state.dpr, 5 * state.dpr]);
+    g.lineWidth = 1.5 * state.dpr;
     g.beginPath();
     q.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
     g.closePath();
@@ -339,19 +382,93 @@ function draw() {
     g.setLineDash([]);
     q.forEach(([x, y], i) => {
       g.beginPath();
-      g.arc(x, y, 7, 0, Math.PI * 2);
+      g.arc(x, y, r, 0, Math.PI * 2);
       g.fillStyle = state.drag === i ? '#1723d8' : '#fff';
       g.fill();
-      g.lineWidth = 2;
+      g.lineWidth = 2 * state.dpr;
       g.strokeStyle = '#0a0b0d';
       g.stroke();
+      if (state.drag === i) {
+        g.beginPath();
+        g.arc(x, y, r * 1.9, 0, Math.PI * 2);
+        g.strokeStyle = 'rgba(255,255,255,.55)';
+        g.lineWidth = 1.5 * state.dpr;
+        g.stroke();
+      }
     });
     g.restore();
   }
+
+  if (loupe) drawLoupe(c);
+}
+
+// A finger covers the corner it is placing, so show the pixels under it in a
+// bubble offset away from the touch point, sampled from the source photo so the
+// board edge stays sharp at any preview scale.
+function drawLoupe(c) {
+  const s = state.view * state.dpr;
+  const [ix, iy] = state.quad[state.drag];
+  const cx = ix * s, cy = iy * s;
+  const R = LOUPE_R * state.dpr;
+  // keep the bubble on-canvas and clear of the finger
+  const bx = Math.max(R + 2, Math.min(c.width - R - 2, cx < c.width / 2 ? cx + R * 1.6 : cx - R * 1.6));
+  const by = Math.max(R + 2, Math.min(c.height - R - 2, cy - R * 1.6));
+  const zoom = s * LOUPE_ZOOM;           // image px -> loupe px
+  const rad = R / zoom;                  // sampled radius in image px
+  const toLoupe = ([px, py]) => [bx + (px - ix) * zoom, by + (py - iy) * zoom];
+
+  const g = c.getContext('2d');
+  g.save();
+  g.beginPath();
+  g.arc(bx, by, R, 0, Math.PI * 2);
+  g.fillStyle = '#0c0d10';
+  g.fill();
+  g.clip();
+  g.drawImage(state.img, ix - rad, iy - rad, rad * 2, rad * 2, bx - R, by - R, R * 2, R * 2);
+
+  // the two edges meeting this corner, so you can line it up on the board;
+  // dark under light so they read on both a bright board and a dark sky
+  const n = state.quad.length;
+  const edges = [(state.drag + 1) % n, (state.drag + n - 1) % n].map(j => toLoupe(state.quad[j]));
+  for (const [style, width, dash] of [['rgba(0,0,0,.55)', 4, []], ['#fff', 1.5, [5, 4]]]) {
+    g.strokeStyle = style;
+    g.lineWidth = width * state.dpr;
+    g.setLineDash(dash.map(v => v * state.dpr));
+    for (const [ex, ey] of edges) {
+      g.beginPath();
+      g.moveTo(bx, by);
+      g.lineTo(ex, ey);
+      g.stroke();
+    }
+  }
+  g.restore();
+
+  g.save();
+  g.strokeStyle = 'rgba(255,255,255,.9)';
+  g.lineWidth = 2 * state.dpr;
+  g.beginPath();
+  g.arc(bx, by, R, 0, Math.PI * 2);
+  g.stroke();
+  g.strokeStyle = '#1723d8';
+  g.lineWidth = 1.5 * state.dpr;
+  const tick = R * 0.28;
+  g.beginPath();
+  g.moveTo(bx - tick, by); g.lineTo(bx + tick, by);
+  g.moveTo(bx, by - tick); g.lineTo(bx, by + tick);
+  g.stroke();
+  g.restore();
+}
+
+// image px per CSS px, measured rather than assumed: `max-width: 100%` can clamp
+// the element narrower than its backing store.
+function viewScale() {
+  const r = els.stage.getBoundingClientRect();
+  return r.width && state.img ? r.width / state.img.width : state.view;
 }
 
 function nearestCorner(x, y) {
-  let best = -1, bd = 18 / state.view;
+  if (!state.quad) return -1;
+  let best = -1, bd = (COARSE ? HIT_R_TOUCH : HIT_R_MOUSE) / viewScale();
   state.quad.forEach(([px, py], i) => {
     const d = Math.hypot(px - x, py - y);
     if (d < bd) { bd = d; best = i; }
@@ -394,10 +511,22 @@ function moveQuad(origin, dx, dy) {
   return moved.map(([x, y]) => [x + shiftX, y + shiftY]);
 }
 
-function pos(e) {
+function pos(e) { return posOf(e.clientX, e.clientY); }
+
+function posOf(clientX, clientY) {
   const r = els.stage.getBoundingClientRect();
-  return [(e.clientX - r.left) / state.view, (e.clientY - r.top) / state.view];
+  const s = viewScale();
+  return [(clientX - r.left) / s, (clientY - r.top) / s];
 }
+
+// touch-action is pan-y, so a swipe over the photo scrolls the page; block the
+// browser's gesture only for touches that land on the board itself.
+els.stage.addEventListener('touchstart', e => {
+  if (!state.img || !state.quad || e.touches.length !== 1) return;
+  const t = e.touches[0];
+  const [x, y] = posOf(t.clientX, t.clientY);
+  if (nearestCorner(x, y) >= 0 || pointInQuad(x, y)) e.preventDefault();
+}, { passive: false });
 
 els.stage.addEventListener('pointerdown', e => {
   const [x, y] = pos(e);
@@ -408,12 +537,16 @@ els.stage.addEventListener('pointerdown', e => {
     state.dragOrigin = state.quad.map(p => p.slice());
   }
   if (state.drag >= 0) {
+    const [px, py] = state.quad[state.drag];
+    state.grab = [px - x, py - y];
+    state.touchDrag = e.pointerType !== 'mouse';
     els.stage.setPointerCapture(e.pointerId);
     els.stage.style.cursor = 'grabbing';
     els.hint.style.opacity = 0;
     setChip(state.drag);
     render();
   } else if (state.drag === -2) {
+    state.touchDrag = e.pointerType !== 'mouse';
     els.stage.setPointerCapture(e.pointerId);
     els.stage.style.cursor = 'grabbing';
     els.hint.style.opacity = 0;
@@ -421,6 +554,7 @@ els.stage.addEventListener('pointerdown', e => {
 });
 els.stage.addEventListener('pointermove', e => {
   if (state.drag === -1) {
+    if (e.pointerType !== 'mouse') return;
     const [x, y] = pos(e);
     els.stage.style.cursor = nearestCorner(x, y) >= 0 || pointInQuad(x, y) ? 'grab' : 'default';
     return;
@@ -431,13 +565,14 @@ els.stage.addEventListener('pointermove', e => {
     if (convexQuad(next)) state.quad = next;
   } else {
     const next = state.quad.map(p => p.slice());
-    next[state.drag] = clampPoint([x, y]);
+    next[state.drag] = clampPoint([x + state.grab[0], y + state.grab[1]]);
     if (convexQuad(next)) state.quad = next;
   }
   render();
 });
 const endDrag = () => {
   state.drag = -1;
+  state.touchDrag = false;
   state.dragOrigin = null;
   state.dragStart = null;
   setChip(-1);
@@ -449,6 +584,18 @@ els.stage.addEventListener('pointercancel', endDrag);
 
 function setChip(i) {
   els.chips.forEach((c, n) => c.classList.toggle('active', n === i));
+}
+
+/* ---------- control sheet (phones) ---------- */
+
+if (els.sheetToggle) {
+  els.sheetToggle.addEventListener('click', () => {
+    const open = els.panel.classList.toggle('open');
+    document.body.classList.toggle('sheet-open', open);
+    els.sheetToggle.setAttribute('aria-expanded', String(open));
+    if (!open) els.panel.scrollTop = 0;
+    render();          // the board gets less room while the sheet is up
+  });
 }
 
 /* ---------- sample city ---------- */
@@ -555,9 +702,7 @@ function looksHeic(f) {
   return /\.(heic|heif)$/i.test(f.name) || /^image\/hei[cf]/i.test(f.type);
 }
 
-els.file.addEventListener('change', e => {
-  const f = e.target.files[0];
-  e.target.value = '';           // let the same file be picked again
+function loadFile(f) {
   if (!f) return;
 
   if (f.type && !f.type.startsWith('image/')) {
@@ -574,12 +719,25 @@ els.file.addEventListener('change', e => {
   };
   img.onerror = () => {
     URL.revokeObjectURL(url);
+    // A photo taken through the capture input comes back as JPEG, so “Take photo”
+    // is the quickest way out of this on a phone.
     els.status.textContent = looksHeic(f)
-      ? 'This browser can\u2019t decode HEIC/HEIF. On iPhone: Settings \u203a Camera \u203a Formats \u203a Most Compatible, or export the photo as JPEG.'
+      ? (COARSE
+        ? 'This browser can\u2019t decode HEIC/HEIF. Use \u201cTake photo\u201d (that comes through as JPEG), or Settings \u203a Camera \u203a Formats \u203a Most Compatible.'
+        : 'This browser can\u2019t decode HEIC/HEIF. On iPhone: Settings \u203a Camera \u203a Formats \u203a Most Compatible, or export the photo as JPEG.')
       : 'Couldn\u2019t read \u201c' + f.name + '\u201d. Try a JPEG, PNG or WebP export of the photo.';
   };
   img.src = url;
   els.status.textContent = 'Loading photo\u2026';
+}
+
+[els.file, els.camera].forEach(input => {
+  if (!input) return;
+  input.addEventListener('change', e => {
+    const f = e.target.files[0];
+    e.target.value = '';         // let the same file be picked again
+    loadFile(f);
+  });
 });
 
 els.photo.addEventListener('click', () => {
@@ -616,20 +774,78 @@ document.querySelectorAll('[data-placement]').forEach(button => {
   [els.text, els.scale, els.wordmark, els.legs, els.guides].forEach(n =>
     n.addEventListener(ev, render));
 });
-window.addEventListener('resize', render);
-
-els.download.addEventListener('click', () => {
-  const out = document.createElement('canvas');
-  const guides = els.guides.checked;
-  els.guides.checked = false;
-  compose(out, 1);
-  els.guides.checked = guides;
-  const a = document.createElement('a');
-  a.download = 'do-it-all-with-devin.png';
-  a.href = out.toDataURL('image/png');
-  a.click();
-  els.status.textContent = 'Saved at ' + out.width + '\u00d7' + out.height + '. Post it.';
+// Mobile browsers fire resize while the URL bar collapses; a width-only change
+// is the only one that needs a re-fit.
+let resizeTimer = 0, lastW = window.innerWidth;
+window.addEventListener('resize', () => {
+  const heightOnly = window.innerWidth === lastW && !PHONE();
+  lastW = window.innerWidth;
+  if (heightOnly) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(render, 120);
 });
+
+function canShareFile(file) {
+  return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [file] }));
+}
+
+function saveBlob(blob) {
+  const url = URL.createObjectURL(blob);   // a multi-MB data: URL is unreliable on iOS
+  const a = document.createElement('a');
+  a.download = FILENAME;
+  a.href = url;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+async function exportPng() {
+  if (!state.img) return;
+  els.download.disabled = true;
+  els.status.textContent = 'Rendering at full resolution\u2026';
+  // let the status paint before the synchronous warp blocks the main thread
+  await new Promise(r => setTimeout(r, 60));
+
+  try {
+    const out = document.createElement('canvas');
+    const guides = els.guides.checked;
+    els.guides.checked = false;
+    compose(out, 1);
+    els.guides.checked = guides;
+
+    const blob = await new Promise(res => out.toBlob(res, 'image/png'));
+    if (!blob) throw new Error('encode failed');
+    const size = out.width + '\u00d7' + out.height;
+    out.width = out.height = 0;              // release the full-res canvas
+
+    const file = new File([blob], FILENAME, { type: 'image/png' });
+    if (canShareFile(file)) {
+      try {
+        await navigator.share({ files: [file], text: CAPTION });
+        els.status.textContent = 'Shared at ' + size + '.';
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') { els.status.textContent = 'Share cancelled.'; return; }
+        // permission or unsupported target — fall back to a download
+      }
+    }
+    saveBlob(blob);
+    els.status.textContent = 'Saved at ' + size + '. Post it.';
+  } catch {
+    els.status.textContent = 'Export failed \u2014 the photo may be too large for this browser. Try a smaller one.';
+  } finally {
+    els.download.disabled = false;
+  }
+}
+
+els.download.addEventListener('click', exportPng);
+
+if (COARSE && navigator.canShare) {
+  try {
+    if (navigator.canShare({ files: [new File([new Blob()], FILENAME, { type: 'image/png' })] })) {
+      els.download.textContent = 'Share image';
+    }
+  } catch { /* no file sharing here; keep “Download PNG” */ }
+}
 
 function refreshTweet() {
   els.tweet.href = 'https://twitter.com/intent/tweet?text=' +

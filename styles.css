@@ -5,6 +5,7 @@
   --text: #f2f3f5;
   --muted: #8b909a;
   --accent: #ffffff;
+  --sheet-peek: 56px;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -17,6 +18,7 @@ body {
 }
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 4px 14px;
   padding: 14px 22px; border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -0.01em; }
@@ -40,9 +42,12 @@ main {
   display: flex; align-items: center; justify-content: center;
   min-height: 380px;
 }
-#stage { max-width: 100%; display: block; touch-action: none; cursor: grab; }
+/* pan-y keeps a swipe over the image scrolling the page; app.js calls
+   preventDefault on touchstart only when the touch lands on a corner handle. */
+#stage { max-width: 100%; display: block; touch-action: pan-y pinch-zoom; cursor: grab; }
 .hint {
   position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+  max-width: calc(100% - 24px); text-align: center;
   background: rgba(0,0,0,.62); border: 1px solid var(--line);
   padding: 6px 12px; border-radius: 999px; font-size: 12.5px; color: #d7dae0;
   pointer-events: none; transition: opacity .3s;
@@ -74,6 +79,7 @@ main {
   text-decoration: none; transition: background .15s, border-color .15s;
 }
 .btn:hover { background: #21252d; border-color: #34394333; }
+.btn[disabled] { opacity: .55; cursor: default; }
 .btn.primary { background: #fff; color: #0a0b0d; border-color: #fff; }
 .btn.primary:hover { background: #e6e8ec; }
 .btn.ghost { background: transparent; }
@@ -102,7 +108,81 @@ textarea:focus, input:focus { outline: 1px solid #3a4150; }
 .toggle { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
 .toggle input { accent-color: #fff; }
 
+.sheet-handle, .touch-only { display: none; }
+
 @media (max-width: 900px) {
   main { grid-template-columns: 1fr; }
   .panel { position: static; }
+}
+
+/* ---------- phones (incl. short landscape) ---------- */
+
+@media (max-width: 700px), (max-height: 520px) and (orientation: landscape) and (pointer: coarse) {
+  /* the tag wraps to a second line on a phone and costs the board 24px */
+  .topbar { padding: 11px 14px; font-size: 15px; }
+  .topbar .tag { display: none; }
+  main {
+    padding: 12px; gap: 12px;
+    align-content: center;
+    min-height: calc(100dvh - 52px - var(--sheet-peek));
+  }
+
+  /* let the canvas define the box: no letterboxing around a small image */
+  .stage-inner { min-height: 0; border-radius: 12px; }
+  .stage-foot { margin-top: 8px; }
+
+  /* the panel becomes a bottom sheet so image and controls share the screen */
+  .panel {
+    position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; top: auto;
+    max-height: 54vh; max-height: 54dvh; overflow-y: auto;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+    border-radius: 16px 16px 0 0; border-bottom: 0;
+    padding: 0 14px 20px;
+    transform: translateY(calc(100% - var(--sheet-peek)));
+    transition: transform .22s ease;
+    box-shadow: 0 -12px 32px rgba(0,0,0,.5);
+  }
+  .panel.open { transform: translateY(0); }
+  body { padding-bottom: var(--sheet-peek); }
+  /* an open sheet would cover a centred image, so pull the board to the top */
+  body.sheet-open main { align-content: start; }
+
+  .sheet-handle {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    position: sticky; top: 0; z-index: 1;
+    width: 100%; min-height: var(--sheet-peek); padding: 8px 0 10px;
+    background: var(--panel); border: 0; cursor: pointer;
+    color: var(--text); font: inherit;
+  }
+  .sheet-grip { width: 40px; height: 4px; border-radius: 999px; background: #3a4150; }
+  .sheet-label { font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+  .panel.open .sheet-label { color: var(--muted); }
+
+  .touch-only { display: inline-flex; }
+
+  /* touch targets: 44px minimum */
+  .btn { min-height: 44px; padding: 11px 12px; font-size: 15px; }
+  .row { flex-wrap: wrap; }
+  .row .btn { flex: 1 1 42%; }
+  .placement .btn { flex: 1 1 0; padding: 11px 4px; }
+  .preset { font-size: 13px; padding: 9px 13px; min-height: 40px; }
+  .chip { padding: 7px 13px; font-size: 12px; min-height: 40px; }
+  .toggle { min-height: 44px; font-size: 13.5px; }
+  .toggle input { width: 22px; height: 22px; }
+
+  /* 16px stops iOS Safari zooming the page on focus (and never zooming back) */
+  textarea { font-size: 16px; }
+
+  .slider { margin: 4px 0; min-height: 44px; }
+  .slider input { height: 44px; background: transparent; -webkit-appearance: none; appearance: none; }
+  .slider input::-webkit-slider-runnable-track {
+    height: 5px; border-radius: 999px; background: #2b3038;
+  }
+  .slider input::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 26px; height: 26px; margin-top: -11px;
+    border-radius: 50%; background: #fff; border: 0;
+  }
+  .slider input::-moz-range-track { height: 5px; border-radius: 999px; background: #2b3038; }
+  .slider input::-moz-range-thumb { width: 26px; height: 26px; border: 0; border-radius: 50%; background: #fff; }
 }
