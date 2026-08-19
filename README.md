@@ -1,9 +1,8 @@
-# Billboard Remix — Do It All With Devin
+# Billboard Remix — Add a Devin billboard to your city
 
-A zero-dependency single page that pastes your own line onto a real billboard photo with
-correct perspective, then hands you a full-resolution PNG and a prefilled quote-tweet.
-
-Built for the "Do It All With Devin" campaign launch (39 boards live across NYC & SF).
+A zero-dependency single page that draws a synthetic Devin billboard into any city photo,
+then hands you a PNG at the photo's own resolution (capped at 4096px on the long side, so the
+per-pixel warp stays interactive) and a prefilled X post.
 
 ## Use it
 
@@ -11,24 +10,21 @@ Built for the "Do It All With Devin" campaign launch (39 boards live across NYC 
 python3 -m http.server 8123   # then open http://localhost:8123/
 ```
 
-1. Upload a photo of a live board (or use the bundled sample photo / procedural sample scene).
-2. Drag the four handles onto the corners of the board face.
-3. Type your line, pick a look, tune size and blend.
-4. Download PNG, copy the caption, quote-tweet.
+1. Upload a street, skyline or rooftop photo, or use the procedural Sample city.
+2. Choose a line, then drag inside the board to move it or drag its four handles to size and tilt it.
+3. Download the PNG, copy the caption, or post it on X.
 
-## How the warp works
+## How the board is drawn
 
-The four handles define a quad in image space. `homography()` solves the 8x8 system for the
-projective transform from that quad back to the text layer, and `warp()` inverse-maps every
-pixel inside the quad's bounding box, sampling the text layer bilinearly. The `blend` control
-modulates the pasted face by the underlying scene luminance so the board picks up the photo's
-own light instead of looking like a flat sticker.
+The photo is drawn first, followed by a dark billboard face, frame, drop shadow, legs and
+catwalk band. The text layer uses a subtle top-down lighting gradient and is inverse-mapped
+into the four-corner quad with an 8x8 homography solve and bilinear sampling. Warm gantry
+lights are drawn over the face last.
 
 No build step, no dependencies, no uploads — everything happens in the canvas on your machine.
 
 ## Files
 
 - `index.html` / `styles.css` — UI
-- `app.js` — homography solve, text layer, warp/composite, sample scene generator
-- `sample-photo.jpg` — blank-faced billboard for demos
+- `app.js` — homography solve, board renderer, text layer, warp/composite, sample city generator
 - `example-output.png` — exported example

@@ -68,6 +68,7 @@ main {
 .group:last-child { border-bottom: 0; }
 .label { font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
 .row { display: flex; gap: 8px; }
+.placement .btn { flex: 1; }
 .note { color: var(--muted); font-size: 12.5px; margin: 9px 0 0; }
 
 .btn {
@@ -101,10 +102,6 @@ textarea:focus, input:focus { outline: 1px solid #3a4150; }
 }
 .preset:hover { background: #1c2028; color: #fff; }
 
-.themes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 12px; }
-.theme { height: 34px; border-radius: 8px; border: 1px solid var(--line); cursor: pointer; }
-.theme.active { outline: 2px solid #fff; outline-offset: 1px; }
-
 .slider { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 12.5px; color: var(--muted); }
 .slider span { width: 62px; flex: none; }
 .slider input { flex: 1; accent-color: #fff; }
@@ -121,7 +118,9 @@ textarea:focus, input:focus { outline: 1px solid #3a4150; }
 /* ---------- phones (incl. short landscape) ---------- */
 
 @media (max-width: 700px), (max-height: 520px) and (orientation: landscape) and (pointer: coarse) {
-  .topbar { padding: 11px 14px; }
+  /* the tag wraps to a second line on a phone and costs the board 24px */
+  .topbar { padding: 11px 14px; font-size: 15px; }
+  .topbar .tag { display: none; }
   main {
     padding: 12px; gap: 12px;
     align-content: center;
@@ -135,8 +134,7 @@ textarea:focus, input:focus { outline: 1px solid #3a4150; }
   /* the panel becomes a bottom sheet so image and controls share the screen */
   .panel {
     position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; top: auto;
-    /* leaves the image visible above the sheet while you edit */
-    max-height: 64vh; max-height: 64dvh; overflow-y: auto;
+    max-height: 54vh; max-height: 54dvh; overflow-y: auto;
     -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
     border-radius: 16px 16px 0 0; border-bottom: 0;
     padding: 0 14px 20px;
@@ -146,6 +144,8 @@ textarea:focus, input:focus { outline: 1px solid #3a4150; }
   }
   .panel.open { transform: translateY(0); }
   body { padding-bottom: var(--sheet-peek); }
+  /* an open sheet would cover a centred image, so pull the board to the top */
+  body.sheet-open main { align-content: start; }
 
   .sheet-handle {
     display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -164,7 +164,7 @@ textarea:focus, input:focus { outline: 1px solid #3a4150; }
   .btn { min-height: 44px; padding: 11px 12px; font-size: 15px; }
   .row { flex-wrap: wrap; }
   .row .btn { flex: 1 1 42%; }
-  .theme { height: 44px; }
+  .placement .btn { flex: 1 1 0; padding: 11px 4px; }
   .preset { font-size: 13px; padding: 9px 13px; min-height: 40px; }
   .chip { padding: 7px 13px; font-size: 12px; min-height: 40px; }
   .toggle { min-height: 44px; font-size: 13.5px; }

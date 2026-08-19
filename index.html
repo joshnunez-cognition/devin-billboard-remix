@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Do It All With Devin — Billboard Remix</title>
+<title>Add a Devin billboard to your city</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
     <span class="dot"></span>
-    <span>Do It All With Devin</span>
+    <span>Add a Devin billboard to your city</span>
   </div>
   <div class="tag">Billboard Remix</div>
 </header>
@@ -19,7 +19,7 @@
   <section class="stage">
     <div class="stage-inner">
       <canvas id="stage"></canvas>
-      <div id="hint" class="hint">Drag the four corners to match the billboard face</div>
+      <div id="hint" class="hint">Drag inside to move the board, corners to size and tilt.</div>
     </div>
     <div class="stage-foot">
       <div class="corners">
@@ -28,7 +28,7 @@
         <span class="chip" data-corner="2">BR</span>
         <span class="chip" data-corner="3">BL</span>
       </div>
-      <label class="toggle"><input type="checkbox" id="showGuides" checked /> Show guides</label>
+      <label class="toggle"><input type="checkbox" id="showGuides" checked /> Show handles</label>
     </div>
   </section>
 
@@ -38,7 +38,7 @@
       <span class="sheet-label">Edit your billboard</span>
     </button>
     <div class="group">
-      <div class="label">1 · Billboard photo</div>
+      <div class="label">1 · Your city photo</div>
       <label class="btn file touch-only" id="cameraBtn">
         Take photo
         <input type="file" id="camera" accept="image/*" capture="environment" />
@@ -48,10 +48,9 @@
           Upload photo
           <input type="file" id="file" accept="image/*" />
         </label>
-        <button class="btn ghost" id="usePhoto">Sample photo</button>
-        <button class="btn ghost" id="useSample">Sample scene</button>
+        <button class="btn ghost" id="usePhoto">Sample city</button>
       </div>
-      <p class="note">Shoot one of the 39 live boards, or drop in a photo from the Pixieset gallery.</p>
+      <p class="note">Any street, skyline or rooftop shot — we'll build the board.</p>
     </div>
 
     <div class="group">
@@ -62,23 +61,29 @@ with Devin.</textarea>
     </div>
 
     <div class="group">
-      <div class="label">3 · Look</div>
-      <div class="themes" id="themes"></div>
+      <div class="label">3 · Place the board</div>
+      <div class="row placement">
+        <button class="btn ghost" data-placement="left">Left</button>
+        <button class="btn ghost" data-placement="center">Center</button>
+        <button class="btn ghost" data-placement="right">Right</button>
+      </div>
+      <p class="note">Drag inside to move, corners to size and tilt.</p>
+      <label class="toggle"><input type="checkbox" id="legs" checked /> Legs</label>
+    </div>
+
+    <div class="group">
+      <div class="label">4 · Look</div>
       <div class="slider">
         <span>Text size</span>
         <input type="range" id="scale" min="40" max="130" value="88" />
-      </div>
-      <div class="slider">
-        <span>Blend</span>
-        <input type="range" id="blend" min="0" max="100" value="18" />
       </div>
       <label class="toggle"><input type="checkbox" id="wordmark" checked /> Devin wordmark</label>
     </div>
 
     <div class="group">
-      <div class="label">4 · Ship it</div>
+      <div class="label">5 · Ship it</div>
       <button class="btn primary" id="download">Download PNG</button>
-      <a class="btn" id="tweet" target="_blank" rel="noopener">Quote-tweet Scott's post</a>
+      <a class="btn" id="tweet" target="_blank" rel="noopener">Post on X</a>
       <button class="btn ghost" id="copyText">Copy caption</button>
       <p class="note" id="status"></p>
     </div>
