@@ -512,10 +512,10 @@ function mulberry(seed) {
 
 function useImage(img, quad) {
   const src = fit(img);
-  const s = src.width / img.width;
+  const sx = src.width / img.width, sy = src.height / img.height;
   state.img = src;
   state.quad = quad
-    ? quad.map(([x, y]) => [x * s, y * s])
+    ? quad.map(([x, y]) => [x * sx, y * sy])
     : placedQuad(src.width, src.height);
   els.hint.style.opacity = 1;
   render();
@@ -536,12 +536,12 @@ function placedQuad(w, h, placement = 'center') {
   ];
 }
 
-// Downscale oversized photos: a 48MP phone shot makes the per-pixel warp crawl
-// and can blow past the browser's canvas limits.
+// Bake the photo into a canvas, downscaled to MAX_SRC on its longest side: a 48MP
+// shot makes the per-pixel warp crawl, and a canvas keeps working after the blob
+// URL behind an <img> is revoked.
 function fit(img) {
   const long = Math.max(img.width, img.height);
-  if (long <= MAX_SRC) return img;
-  const s = MAX_SRC / long;
+  const s = Math.min(1, MAX_SRC / long);
   const c = document.createElement('canvas');
   c.width = Math.round(img.width * s);
   c.height = Math.round(img.height * s);
@@ -549,7 +549,9 @@ function fit(img) {
   return c;
 }
 
-function unsupported(f) {
+// Browsers differ on HEIC/HEIF: Safari decodes it, Chrome and Firefox don't. Try
+// the load either way and only mention the format once it has actually failed.
+function looksHeic(f) {
   return /\.(heic|heif)$/i.test(f.name) || /^image\/hei[cf]/i.test(f.type);
 }
 
@@ -558,11 +560,6 @@ els.file.addEventListener('change', e => {
   e.target.value = '';           // let the same file be picked again
   if (!f) return;
 
-  if (unsupported(f)) {
-    els.status.textContent =
-      'Browsers can\u2019t decode HEIC/HEIF. On iPhone: Settings \u203a Camera \u203a Formats \u203a Most Compatible, or export the photo as JPEG.';
-    return;
-  }
   if (f.type && !f.type.startsWith('image/')) {
     els.status.textContent = 'That file isn\u2019t an image \u2014 pick a JPEG, PNG or WebP.';
     return;
@@ -577,8 +574,9 @@ els.file.addEventListener('change', e => {
   };
   img.onerror = () => {
     URL.revokeObjectURL(url);
-    els.status.textContent =
-      'Couldn\u2019t read \u201c' + f.name + '\u201d. Try a JPEG, PNG or WebP export of the photo.';
+    els.status.textContent = looksHeic(f)
+      ? 'This browser can\u2019t decode HEIC/HEIF. On iPhone: Settings \u203a Camera \u203a Formats \u203a Most Compatible, or export the photo as JPEG.'
+      : 'Couldn\u2019t read \u201c' + f.name + '\u201d. Try a JPEG, PNG or WebP export of the photo.';
   };
   img.src = url;
   els.status.textContent = 'Loading photo\u2026';
@@ -589,6 +587,9 @@ els.photo.addEventListener('click', () => {
   img.onload = () => {
     useImage(img);
     els.status.textContent = 'Sample city loaded \u2014 place your board.';
+  };
+  img.onerror = () => {
+    els.status.textContent = 'Couldn\u2019t draw the sample city \u2014 upload a photo instead.';
   };
 });
 
@@ -627,7 +628,7 @@ els.download.addEventListener('click', () => {
   a.download = 'do-it-all-with-devin.png';
   a.href = out.toDataURL('image/png');
   a.click();
-  els.status.textContent = 'Saved at full resolution. Post it.';
+  els.status.textContent = 'Saved at ' + out.width + '\u00d7' + out.height + '. Post it.';
 });
 
 function refreshTweet() {
