@@ -494,9 +494,7 @@ function sampleCity() {
     }
   }
 
-  const img = new Image();
-  img.src = c.toDataURL('image/png');
-  return img;
+  return c;
 }
 
 function mulberry(seed) {
@@ -549,11 +547,11 @@ function fit(img) {
   return c;
 }
 
-// Browsers differ on HEIC/HEIF: Safari decodes it, Chrome and Firefox don't. Try
-// the load either way and only mention the format once it has actually failed.
 const HEIC_GUIDANCE =
   'This browser can\u2019t decode HEIC/HEIF. On iPhone: Settings \u203a Camera \u203a Formats \u203a Most Compatible, or export the photo as JPEG.';
 
+// Browsers differ on HEIC/HEIF: Safari decodes it, Chrome and Firefox don't. Try
+// the load either way and only mention the format once it has actually failed.
 function looksHeic(f) {
   return /\.(heic|heif)$/i.test(f.name) || /^image\/hei[cf]/i.test(f.type);
 }
@@ -563,10 +561,8 @@ els.file.addEventListener('change', e => {
   e.target.value = '';           // let the same file be picked again
   if (!f) return;
 
-  if (f.type && !f.type.startsWith('image/')) {
-    els.status.textContent = looksHeic(f)
-      ? HEIC_GUIDANCE
-      : 'That file isn\u2019t an image \u2014 pick a JPEG, PNG or WebP.';
+  if (f.type && !f.type.startsWith('image/') && !looksHeic(f)) {
+    els.status.textContent = 'That file isn\u2019t an image \u2014 pick a JPEG, PNG or WebP.';
     return;
   }
 
@@ -588,14 +584,8 @@ els.file.addEventListener('change', e => {
 });
 
 els.photo.addEventListener('click', () => {
-  const img = sampleCity();
-  img.onload = () => {
-    useImage(img);
-    els.status.textContent = 'Sample city loaded \u2014 place your board.';
-  };
-  img.onerror = () => {
-    els.status.textContent = 'Couldn\u2019t draw the sample city \u2014 upload a photo instead.';
-  };
+  useImage(sampleCity());
+  els.status.textContent = 'Sample city loaded \u2014 place your board.';
 });
 
 /* ---------- controls ---------- */
