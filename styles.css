@@ -1,0 +1,111 @@
+:root {
+  --bg: #08090b;
+  --panel: #101216;
+  --line: #23262d;
+  --text: #f2f3f5;
+  --muted: #8b909a;
+  --accent: #ffffff;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 22px; border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -0.01em; }
+.brand .dot { width: 10px; height: 10px; border-radius: 50%; background: #fff; box-shadow: 0 0 14px rgba(255,255,255,.7); }
+.tag { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .14em; }
+
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  padding: 20px;
+  align-items: start;
+}
+.stage { min-width: 0; }
+.stage-inner {
+  position: relative;
+  background: #0c0d10 repeating-conic-gradient(#0e0f13 0% 25%, #111318 0% 50%) 50% / 22px 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 380px;
+}
+#stage { max-width: 100%; display: block; touch-action: none; cursor: grab; }
+.hint {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,.62); border: 1px solid var(--line);
+  padding: 6px 12px; border-radius: 999px; font-size: 12.5px; color: #d7dae0;
+  pointer-events: none; transition: opacity .3s;
+}
+.stage-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+.corners { display: flex; gap: 6px; }
+.chip {
+  font-size: 11px; letter-spacing: .08em; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px;
+}
+.chip.active { color: #fff; border-color: #4a505c; background: #191c22; }
+
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 6px 16px 16px; position: sticky; top: 20px;
+}
+.group { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.group:last-child { border-bottom: 0; }
+.label { font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.row { display: flex; gap: 8px; }
+.note { color: var(--muted); font-size: 12.5px; margin: 9px 0 0; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 100%; padding: 9px 12px; margin-bottom: 8px;
+  background: #191c22; color: var(--text); border: 1px solid var(--line);
+  border-radius: 9px; font-size: 14px; font-weight: 550; cursor: pointer;
+  text-decoration: none; transition: background .15s, border-color .15s;
+}
+.btn:hover { background: #21252d; border-color: #34394333; }
+.btn.primary { background: #fff; color: #0a0b0d; border-color: #fff; }
+.btn.primary:hover { background: #e6e8ec; }
+.btn.ghost { background: transparent; }
+.row .btn { margin-bottom: 0; }
+.btn.file { position: relative; overflow: hidden; }
+.btn.file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+textarea {
+  width: 100%; resize: vertical; padding: 10px;
+  background: #0b0d10; color: var(--text);
+  border: 1px solid var(--line); border-radius: 9px;
+  font: 600 15px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+}
+textarea:focus, input:focus { outline: 1px solid #3a4150; }
+
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.preset {
+  font-size: 12px; padding: 5px 9px; border-radius: 999px;
+  background: #14171c; border: 1px solid var(--line); color: #c9ccd3; cursor: pointer;
+}
+.preset:hover { background: #1c2028; color: #fff; }
+
+.themes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 12px; }
+.theme { height: 34px; border-radius: 8px; border: 1px solid var(--line); cursor: pointer; }
+.theme.active { outline: 2px solid #fff; outline-offset: 1px; }
+
+.slider { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 12.5px; color: var(--muted); }
+.slider span { width: 62px; flex: none; }
+.slider input { flex: 1; accent-color: #fff; }
+.toggle { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.toggle input { accent-color: #fff; }
+
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; }
+  .panel { position: static; }
+}

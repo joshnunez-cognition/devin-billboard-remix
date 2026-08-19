@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Do It All With Devin — Billboard Remix</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="dot"></span>
+    <span>Do It All With Devin</span>
+  </div>
+  <div class="tag">Billboard Remix</div>
+</header>
+
+<main>
+  <section class="stage">
+    <div class="stage-inner">
+      <canvas id="stage"></canvas>
+      <div id="hint" class="hint">Drag the four corners to match the billboard face</div>
+    </div>
+    <div class="stage-foot">
+      <div class="corners">
+        <span class="chip" data-corner="0">TL</span>
+        <span class="chip" data-corner="1">TR</span>
+        <span class="chip" data-corner="2">BR</span>
+        <span class="chip" data-corner="3">BL</span>
+      </div>
+      <label class="toggle"><input type="checkbox" id="showGuides" checked /> Show guides</label>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="group">
+      <div class="label">1 · Billboard photo</div>
+      <div class="row">
+        <label class="btn file">
+          Upload photo
+          <input type="file" id="file" accept="image/*" />
+        </label>
+        <button class="btn ghost" id="usePhoto">Sample photo</button>
+        <button class="btn ghost" id="useSample">Sample scene</button>
+      </div>
+      <p class="note">Shoot one of the 39 live boards, or drop in a photo from the Pixieset gallery.</p>
+    </div>
+
+    <div class="group">
+      <div class="label">2 · Your line</div>
+      <textarea id="text" rows="3" maxlength="90">I do it all
+with Devin.</textarea>
+      <div class="presets" id="presets"></div>
+    </div>
+
+    <div class="group">
+      <div class="label">3 · Look</div>
+      <div class="themes" id="themes"></div>
+      <div class="slider">
+        <span>Text size</span>
+        <input type="range" id="scale" min="40" max="130" value="88" />
+      </div>
+      <div class="slider">
+        <span>Blend</span>
+        <input type="range" id="blend" min="0" max="100" value="18" />
+      </div>
+      <label class="toggle"><input type="checkbox" id="wordmark" checked /> Devin wordmark</label>
+    </div>
+
+    <div class="group">
+      <div class="label">4 · Ship it</div>
+      <button class="btn primary" id="download">Download PNG</button>
+      <a class="btn" id="tweet" target="_blank" rel="noopener">Quote-tweet Scott's post</a>
+      <button class="btn ghost" id="copyText">Copy caption</button>
+      <p class="note" id="status"></p>
+    </div>
+  </aside>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
