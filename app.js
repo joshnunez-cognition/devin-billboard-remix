@@ -20,7 +20,6 @@ const HIT_R_MOUSE = 18;
 const HIT_R_TOUCH = 30;
 const LOUPE_R = 52;
 const LOUPE_ZOOM = 2.6;
-const STAGE_GUTTER = 36;               // main's phone padding (12 top/bottom) plus its 12px gap
 
 const els = {
   stage: document.getElementById('stage'),
@@ -65,6 +64,7 @@ const state = {
   dragOrigin: null,
   dragStart: null,
   dpr: 1,
+  pointerId: null,
   view: 1,             // image px -> CSS px
 };
 
@@ -347,11 +347,20 @@ function stageMaxHeight() {
   // keyboard, which would re-fit and re-warp the board on every keystroke.
   const vh = window.innerHeight;
   const head = document.querySelector('.topbar').offsetHeight;
-  const foot = document.querySelector('.stage-foot').offsetHeight;
+  const main = getComputedStyle(document.querySelector('main'));
+  const footEl = document.querySelector('.stage-foot');
+  const foot = footEl.offsetHeight
+    ? footEl.offsetHeight + parseFloat(getComputedStyle(footEl).marginTop)
+    : 0;
+  const frame = els.stage.parentElement.offsetHeight - els.stage.parentElement.clientHeight;
   const sheet = els.panel.classList.contains('open')
     ? els.panel.offsetHeight
     : parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sheet-peek'), 10) || 56;
-  return Math.max(120, vh - head - foot - sheet - STAGE_GUTTER);
+  // every band between the viewport top and the sheet is measured, so the fit
+  // holds by construction rather than by the floor being generous enough
+  const room = vh - head - parseFloat(main.paddingTop) - parseFloat(main.paddingBottom)
+    - frame - foot - sheet;
+  return Math.max(40, room);
 }
 
 function draw() {
@@ -529,7 +538,11 @@ function posOf(clientX, clientY) {
 // touch-action is pan-y, so a swipe over the photo scrolls the page; block the
 // browser's gesture only for touches that land on the board itself.
 els.stage.addEventListener('touchstart', e => {
-  if (!state.img || !state.quad || e.touches.length !== 1) return;
+  if (!state.img || !state.quad) return;
+  // a further finger landing mid-drag would start a browser gesture, which
+  // cancels the pointer doing the dragging, so swallow it
+  if (state.drag !== -1) { e.preventDefault(); return; }
+  if (e.touches.length !== 1) return;
   const t = e.touches[0];
   const [x, y] = posOf(t.clientX, t.clientY);
   if (nearestCorner(x, y) >= 0 || pointInQuad(x, y)) e.preventDefault();
@@ -549,6 +562,7 @@ els.stage.addEventListener('pointerdown', e => {
     const [px, py] = state.quad[state.drag];
     state.grab = [px - x, py - y];
     state.touchDrag = e.pointerType !== 'mouse';
+    state.pointerId = e.pointerId;
     els.stage.setPointerCapture(e.pointerId);
     els.stage.style.cursor = 'grabbing';
     els.hint.style.opacity = 0;
@@ -556,12 +570,14 @@ els.stage.addEventListener('pointerdown', e => {
     render();
   } else if (state.drag === -2) {
     state.touchDrag = e.pointerType !== 'mouse';
+    state.pointerId = e.pointerId;
     els.stage.setPointerCapture(e.pointerId);
     els.stage.style.cursor = 'grabbing';
     els.hint.style.opacity = 0;
   }
 });
 els.stage.addEventListener('pointermove', e => {
+  if (state.drag !== -1 && e.pointerId !== state.pointerId) return;
   if (state.drag === -1) {
     if (e.pointerType !== 'mouse') return;
     const [x, y] = pos(e);
@@ -579,7 +595,11 @@ els.stage.addEventListener('pointermove', e => {
   }
   render();
 });
-const endDrag = () => {
+// only the finger that started the drag may end it: lifting a second finger,
+// or the gesture it triggers cancelling its own pointer, must not drop the drag
+const endDrag = e => {
+  if (e && state.pointerId !== null && e.pointerId !== state.pointerId) return;
+  state.pointerId = null;
   state.drag = -1;
   state.touchDrag = false;
   state.dragOrigin = null;
@@ -845,9 +865,11 @@ async function exportPng() {
 
 els.download.addEventListener('click', exportPng);
 
-if (COARSE && navigator.canShare) {
+// same predicate the export path uses, so the label can't promise a share the
+// export then declines to attempt
+if (COARSE) {
   try {
-    if (navigator.canShare({ files: [new File([new Blob()], FILENAME, { type: 'image/png' })] })) {
+    if (canShareFile(new File([new Blob()], FILENAME, { type: 'image/png' }))) {
       els.download.textContent = 'Share image';
     }
   } catch { /* no file sharing here; keep “Download PNG” */ }
