@@ -650,9 +650,7 @@ function sampleCity() {
     }
   }
 
-  const img = new Image();
-  img.src = c.toDataURL('image/png');
-  return img;
+  return c;
 }
 
 function mulberry(seed) {
@@ -714,7 +712,7 @@ function looksHeic(f) {
 function loadFile(f) {
   if (!f) return;
 
-  if (f.type && !f.type.startsWith('image/')) {
+  if (f.type && !f.type.startsWith('image/') && !looksHeic(f)) {
     els.status.textContent = 'That file isn\u2019t an image \u2014 pick a JPEG, PNG or WebP.';
     return;
   }
@@ -750,14 +748,8 @@ function loadFile(f) {
 });
 
 els.photo.addEventListener('click', () => {
-  const img = sampleCity();
-  img.onload = () => {
-    useImage(img);
-    els.status.textContent = 'Sample city loaded \u2014 place your board.';
-  };
-  img.onerror = () => {
-    els.status.textContent = 'Couldn\u2019t draw the sample city \u2014 upload a photo instead.';
-  };
+  useImage(sampleCity());
+  els.status.textContent = 'Sample city loaded \u2014 place your board.';
 });
 
 /* ---------- controls ---------- */
@@ -783,6 +775,7 @@ document.querySelectorAll('[data-placement]').forEach(button => {
   [els.text, els.scale, els.wordmark, els.legs, els.guides].forEach(n =>
     n.addEventListener(ev, render));
 });
+
 // Mobile browsers fire resize while the URL bar collapses. On phones the fit
 // depends on viewport height too, so only desktop can skip a height-only change.
 let resizeTimer = 0, lastW = window.innerWidth;
@@ -808,9 +801,12 @@ function saveBlob(blob) {
 }
 
 async function exportPng() {
-  if (!state.img) return;
+  if (!state.img) {
+    els.status.textContent = 'Load a photo before exporting.';
+    return;
+  }
   els.download.disabled = true;
-  els.status.textContent = 'Rendering at full resolution\u2026';
+  els.status.textContent = 'Rendering the full-size image\u2026';
   // let the status paint before the synchronous warp blocks the main thread
   await new Promise(r => setTimeout(r, 60));
 
