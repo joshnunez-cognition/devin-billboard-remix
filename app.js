@@ -20,6 +20,7 @@ const HIT_R_MOUSE = 18;
 const HIT_R_TOUCH = 30;
 const LOUPE_R = 52;
 const LOUPE_ZOOM = 2.6;
+const STAGE_GUTTER = 36;               // main's phone padding (12 top/bottom) plus its 12px gap
 
 const els = {
   stage: document.getElementById('stage'),
@@ -337,14 +338,20 @@ function render() {
   requestAnimationFrame(() => { pending = false; draw(); });
 }
 
-// On phones the canvas has to leave room for the header, the stage footer and
-// the collapsed control sheet, otherwise the lower handles land off-screen
-// (worst in landscape, where the image was taller than the whole viewport).
+// On phones the preview has to fit the gap between the header and the sheet —
+// measured, not guessed, so an open sheet never covers the board (short
+// landscape is the tight case: the sheet takes most of the viewport there).
 function stageMaxHeight() {
   if (!PHONE()) return Infinity;
-  const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-  const share = els.panel.classList.contains('open') ? 0.34 : 0.62;
-  return Math.max(160, Math.min(vh - 175, vh * share));
+  // innerHeight, not visualViewport.height: the latter shrinks by the soft
+  // keyboard, which would re-fit and re-warp the board on every keystroke.
+  const vh = window.innerHeight;
+  const head = document.querySelector('.topbar').offsetHeight;
+  const foot = document.querySelector('.stage-foot').offsetHeight;
+  const sheet = els.panel.classList.contains('open')
+    ? els.panel.offsetHeight
+    : parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sheet-peek'), 10) || 56;
+  return Math.max(120, vh - head - foot - sheet - STAGE_GUTTER);
 }
 
 function draw() {
@@ -357,7 +364,7 @@ function draw() {
   // upscale of a 1x render. Capped at 2x and at MAX_W to bound the warp cost, and
   // dropped to 1x mid-drag (2x quadruples the per-pixel warp: 16ms -> 64ms here).
   const cssW = state.img.width * state.view;
-  const want = state.drag >= 0 ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+  const want = state.drag !== -1 ? 1 : Math.min(window.devicePixelRatio || 1, 2);
   state.dpr = Math.max(1, Math.min(want, MAX_W / cssW));
 
   compose(c, state.view * state.dpr);
@@ -529,6 +536,8 @@ els.stage.addEventListener('touchstart', e => {
 }, { passive: false });
 
 els.stage.addEventListener('pointerdown', e => {
+  // a second finger must not steal a drag that is already running
+  if (!state.img || !state.quad || state.drag !== -1) return;
   const [x, y] = pos(e);
   state.drag = nearestCorner(x, y);
   if (state.drag < 0 && pointInQuad(x, y)) {
@@ -774,8 +783,8 @@ document.querySelectorAll('[data-placement]').forEach(button => {
   [els.text, els.scale, els.wordmark, els.legs, els.guides].forEach(n =>
     n.addEventListener(ev, render));
 });
-// Mobile browsers fire resize while the URL bar collapses; a width-only change
-// is the only one that needs a re-fit.
+// Mobile browsers fire resize while the URL bar collapses. On phones the fit
+// depends on viewport height too, so only desktop can skip a height-only change.
 let resizeTimer = 0, lastW = window.innerWidth;
 window.addEventListener('resize', () => {
   const heightOnly = window.innerWidth === lastW && !PHONE();
@@ -809,8 +818,7 @@ async function exportPng() {
     const out = document.createElement('canvas');
     const guides = els.guides.checked;
     els.guides.checked = false;
-    compose(out, 1);
-    els.guides.checked = guides;
+    try { compose(out, 1); } finally { els.guides.checked = guides; }
 
     const blob = await new Promise(res => out.toBlob(res, 'image/png'));
     if (!blob) throw new Error('encode failed');
@@ -818,7 +826,9 @@ async function exportPng() {
     out.width = out.height = 0;              // release the full-res canvas
 
     const file = new File([blob], FILENAME, { type: 'image/png' });
-    if (canShareFile(file)) {
+    // only where the button says "Share image": desktop Chrome can share files
+    // too, and a dismissed share sheet there would leave the user with nothing
+    if (COARSE && canShareFile(file)) {
       try {
         await navigator.share({ files: [file], text: CAPTION });
         els.status.textContent = 'Shared at ' + size + '.';
